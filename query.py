@@ -2,14 +2,17 @@ import requests
 from typing import NamedTuple, Any
 
 
-class HubmapSinglecellDataset(NamedTuple):
+class HubmapSCRNASeqDataset(NamedTuple):
     raw_expr: str
     expr: str
     secondary_analysis: str
     scvelo: str | None = None
 
 
-def get_dataset_urls(uuid: str) -> HubmapSinglecellDataset:
+def get_dataset_urls(uuid: str) -> HubmapSCRNASeqDataset:
+    """Gets direct URLs to datasets that can be registered as Artifacts.
+
+    Note that this is currently designed for scRNA-seq datasets."""
     url = "https://search.api.hubmapconsortium.org/v3/param-search/datasets"
     params = {"uuid": uuid}
     response = requests.get(url, params=params)
@@ -37,7 +40,7 @@ def get_dataset_urls(uuid: str) -> HubmapSinglecellDataset:
                 if head_response.ok:
                     urls[file_type] = potential_url
 
-    return HubmapSinglecellDataset(
+    return HubmapSCRNASeqDataset(
         raw_expr=urls.get("raw_expr.h5ad"),
         expr=urls.get("expr.h5ad"),
         secondary_analysis=urls.get("secondary_analysis.h5ad"),
@@ -46,6 +49,11 @@ def get_dataset_urls(uuid: str) -> HubmapSinglecellDataset:
 
 
 def get_dataset_info(uuid: str) -> Any:
+    """Fetches all associated metadata of a dataset UUID.
+
+    Does not fetch detailed Donors or Samples.
+    See also https://docs.hubmapconsortium.org/param-search/
+    """
     url = "https://search.api.hubmapconsortium.org/v3/param-search/datasets"
     params = {"uuid": uuid}
     response = requests.get(url, params=params)
