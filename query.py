@@ -1,5 +1,6 @@
 import requests
 from typing import NamedTuple, Any
+import re
 
 
 class HubmapSCRNASeqDataset(NamedTuple):
@@ -64,3 +65,10 @@ def get_dataset_info(uuid: str) -> Any:
         response.raise_for_status()
 
     return response
+
+
+def extract_hubmap_uid(url: str) -> str:
+    match = re.search(r"hubmapconsortium\.org/([a-f0-9]{32})", url)
+    if not match:
+        raise ValueError("Invalid HubMap URL format")
+    return match.group(1)
