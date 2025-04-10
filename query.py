@@ -18,8 +18,8 @@ DataSetClass = TypeVar("DataSetClass", bound=NamedTuple)
 
 class scRNAseqDataset(NamedTuple):
     raw_expr: str
-    expr: str
-    secondary_analysis: str
+    expr: str | None = None
+    secondary_analysis: str | None = None
     scvelo: str | None = None
 
 
@@ -29,7 +29,7 @@ class BulkseqDataset(NamedTuple):
 
 def get_dataset_urls(
     uuid: str, file_types: Iterable[str], dataset_class: DataSetClass
-) -> DataSetClass:
+) -> DataSetClass | None:
     """Gets direct URLs to datasets that can be registered as Artifacts."""
     url = "https://search.api.hubmapconsortium.org/v3/param-search/datasets"
     params = {"uuid": uuid}
@@ -47,16 +47,27 @@ def get_dataset_urls(
                 potential_url = (
                     f"https://assets.hubmapconsortium.org/{descendant}/{file_type}"
                 )
-                head_response = requests.head(potential_url)
-                if head_response.ok:
+                if requests.head(potential_url).ok:
                     urls[file_type] = potential_url
 
-    # Dynamically create kwargs for the dataset class
+    variant_mapping = {
+        "raw_expr": {"raw_expr.h5ad", "out.h5ad"},
+        "scvelo": {"scvelo.h5ad", "scvelo_annotated.h5ad"},
+    }
+
     kwargs = {}
     for field in dataset_class.__annotations__:
-        for file_type in urls:
-            if file_type.startswith(f"{field}."):
-                kwargs[field] = urls[file_type]
+        variants = variant_mapping.get(field, {f"{field}.h5ad"})
+        for v in variants:
+            if v in urls:
+                kwargs[field] = urls[v]
+                break
+        else:
+            kwargs[field] = None
+
+    if all(value is None for value in kwargs.values()):
+        # if no valid files found for this uuid — skip it
+        return None
 
     return dataset_class(**kwargs)  # type: ignore
 
