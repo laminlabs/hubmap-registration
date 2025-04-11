@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterable, NamedTuple, TypeVar
 
 import pandas as pd
+from lamin_utils import logger
 import requests
 from requests.exceptions import SSLError, RequestException
 from rich.progress import (
@@ -34,10 +35,10 @@ def safe_head(url: str, retries: int = 3, delay: float = 0.5) -> bool:
             response = requests.head(url, timeout=5)
             return response.ok
         except SSLError:
-            print(f"[SSL error] {url} (retry {attempt + 1}/{retries})")
+            logger.error(f"SSL error for {url}. (retry {attempt + 1}/{retries})")
             time.sleep(delay)
         except RequestException:
-            print(f"[Request error] {url} (retry {attempt + 1}/{retries})")
+            logger.error(f"Request error for {url}. (retry {attempt + 1}/{retries})")
             time.sleep(delay)
     return False
 
@@ -146,8 +147,8 @@ def create_hubmap_metadata_df(
                 )
 
                 if dataset_urls is None:
-                    print(
-                        f"[Warning] No usable files for uuid {uuid}, HuBMAP ID {dataset_info.get('hubmap_id')}."
+                    logger.warning(
+                        f"No usable files for uuid {uuid}, HuBMAP ID {dataset_info.get('hubmap_id')}."
                     )
                     continue
 
@@ -272,7 +273,7 @@ def create_hubmap_metadata_df(
                 valid_uuids.append(uuid)
 
             except Exception as e:
-                print(f"[Error] uuid {uuid} failed: {e}")
+                logger.error(f"Error processing uuid {uuid}: {e}")
 
             progress.update(task, advance=1)
 
