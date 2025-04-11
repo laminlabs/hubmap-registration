@@ -57,7 +57,7 @@ def get_dataset_urls(
 
     kwargs = {}
     for field in dataset_class.__annotations__:
-        variants = variant_mapping.get(field, {f"{field}.h5ad"})
+        variants = variant_mapping.get(field, {f"{field}.h5ad", f"{field}.h5"})
         for v in variants:
             if v in urls:
                 kwargs[field] = urls[v]
@@ -94,8 +94,12 @@ def create_hubmap_metadata_df(
     hubmap_metadata: pd.DataFrame,
     file_types: Iterable[str],
     dataset_class: DataSetClass,
-):
+) -> pd.DataFrame:
     data = []
+    valid_uuids = []
+
+    metadata_lookup = hubmap_metadata.set_index("uuid")
+
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -108,143 +112,157 @@ def create_hubmap_metadata_df(
         task = progress.add_task(
             "[cyan]Processing datasets...", total=len(hubmap_metadata), uuid=""
         )
-        for uuid in hubmap_metadata["uuid"].values:
+
+        for uuid in metadata_lookup.index:
             progress.update(task, uuid=uuid)
-            dataset_info = get_dataset_info(uuid)[0]
-            donor_metadata = (
-                dataset_info.get("donor", {})
-                .get("metadata", {})
-                .get("organ_donor_data", [])
-            )
 
-            dataset_urls = get_dataset_urls(
-                uuid, file_types=file_types, dataset_class=dataset_class
-            )
-            urls = {}
-            for attr in dir(dataset_urls):
-                if not attr.startswith("_") and not callable(
-                    getattr(dataset_urls, attr)
-                ):
-                    value = getattr(dataset_urls, attr)
-                    urls[f"{attr}_url"] = value if value is not None else ""
+            try:
+                dataset_info = get_dataset_info(uuid)[0]
+                donor_metadata = (
+                    dataset_info.get("donor", {})
+                    .get("metadata", {})
+                    .get("organ_donor_data", [])
+                )
 
-            row = {
-                "assay": hubmap_metadata.loc[
-                    hubmap_metadata["uuid"] == uuid, "assay_type"
-                ].iloc[0],
-                "rnaseq_assay_method": hubmap_metadata.loc[
-                    hubmap_metadata["uuid"] == uuid, "rnaseq_assay_method"
-                ].iloc[0],
-                "title": dataset_info.get("title", ""),
-                "group_name": dataset_info.get("group_name", ""),
-                "consortium": "HuBMAP",
-                "doi": dataset_info.get("registered_doi", ""),
-                "publication_date": datetime.fromtimestamp(
-                    dataset_info.get("published_timestamp", 0) / 1000, tz=timezone.utc
-                ).strftime("%Y-%m-%d")
-                if dataset_info.get("published_timestamp")
-                else "",
-                "status": dataset_info.get("data_access_level", ""),
-                "dataset_type": dataset_info.get("dataset_type", ""),
-                "processing": "raw",
-                "organ": next(
-                    (
-                        sample.get("organ", "")
-                        for sample in dataset_info.get("origin_samples", [])
-                        if sample.get("organ")
+                dataset_urls = get_dataset_urls(
+                    uuid,
+                    file_types=file_types,
+                    dataset_class=dataset_class,
+                )
+
+                if dataset_urls is None:
+                    print(
+                        f"[WARNING] No usable files for uuid {uuid}, HuBMAP ID {dataset_info.get('hubmap_id')}."
+                    )
+                    continue
+
+                # Dynamically collect all URLs from dataset class
+                urls = {
+                    f"{field}_url": getattr(dataset_urls, field) or ""
+                    for field in dataset_class.__annotations__
+                }
+
+                row_meta = metadata_lookup.loc[uuid]
+                row = {
+                    "assay": row_meta["assay_type"],
+                    "rnaseq_assay_method": row_meta["rnaseq_assay_method"],
+                    "title": dataset_info.get("title", ""),
+                    "group_name": dataset_info.get("group_name", ""),
+                    "consortium": "HuBMAP",
+                    "doi": dataset_info.get("registered_doi", ""),
+                    "publication_date": datetime.fromtimestamp(
+                        dataset_info.get("published_timestamp", 0) / 1000,
+                        tz=timezone.utc,
+                    ).strftime("%Y-%m-%d")
+                    if dataset_info.get("published_timestamp")
+                    else "",
+                    "status": dataset_info.get("data_access_level", ""),
+                    "dataset_type": dataset_info.get("dataset_type", ""),
+                    "processing": "raw",
+                    "organ": next(
+                        (
+                            s.get("organ", "")
+                            for s in dataset_info.get("origin_samples", [])
+                            if s.get("organ")
+                        ),
+                        "",
                     ),
-                    "",
-                ),
-                "sample_category": next(
-                    (
-                        sample.get("sample_category", "")
-                        for sample in dataset_info.get("source_samples", [])
-                        if sample.get("sample_category")
+                    "sample_category": next(
+                        (
+                            s.get("sample_category", "")
+                            for s in dataset_info.get("source_samples", [])
+                            if s.get("sample_category")
+                        ),
+                        "",
                     ),
-                    "",
-                ),
-                "analyte_class": next(
-                    (
-                        a
-                        for a in [
-                            "RNA",
-                            "Protein",
-                            "DNA",
-                            "Metabolite",
-                            "Lipid",
-                            "Nucleic acid + protein",
-                            "Endogenous fluorophore",
-                            "Polysaccharide",
-                            "Peptide",
-                            "DNA + RNA",
-                            "Lipid + metabolite",
-                        ]
-                        if a in dataset_info.get("dataset_type", "")
-                        or any(
-                            a in d.get("dataset_type", "")
-                            for d in dataset_info.get("descendants", [])
-                        )
+                    "analyte_class": next(
+                        (
+                            a
+                            for a in [
+                                "RNA",
+                                "Protein",
+                                "DNA",
+                                "Metabolite",
+                                "Lipid",
+                                "Nucleic acid + protein",
+                                "Endogenous fluorophore",
+                                "Polysaccharide",
+                                "Peptide",
+                                "DNA + RNA",
+                                "Lipid + metabolite",
+                            ]
+                            if a in dataset_info.get("dataset_type", "")
+                            or any(
+                                a in d.get("dataset_type", "")
+                                for d in dataset_info.get("descendants", [])
+                            )
+                        ),
+                        "",
                     ),
-                    "",
-                ),
-                "bmi": next(
-                    (
-                        item.get("data_value", "")
-                        for item in donor_metadata
-                        if item.get("grouping_concept_preferred_term")
-                        == "Body Mass Index"
+                    "bmi": next(
+                        (
+                            i.get("data_value", "")
+                            for i in donor_metadata
+                            if i.get("grouping_concept_preferred_term")
+                            == "Body Mass Index"
+                        ),
+                        "",
                     ),
-                    "",
-                ),
-                "age": next(
-                    (
-                        item.get("data_value", "")
-                        for item in donor_metadata
-                        if item.get("grouping_concept_preferred_term") == "Age"
+                    "age": next(
+                        (
+                            i.get("data_value", "")
+                            for i in donor_metadata
+                            if i.get("grouping_concept_preferred_term") == "Age"
+                        ),
+                        "",
                     ),
-                    "",
-                ),
-                "ethnicity": next(
-                    (
-                        item.get("data_value", "")
-                        for item in donor_metadata
-                        if item.get("grouping_concept_preferred_term") == "Race"
+                    "ethnicity": next(
+                        (
+                            i.get("data_value", "")
+                            for i in donor_metadata
+                            if i.get("grouping_concept_preferred_term") == "Race"
+                        ),
+                        "",
                     ),
-                    "",
-                ),
-                "sex": next(
-                    (
-                        item.get("data_value", "")
-                        for item in donor_metadata
-                        if item.get("grouping_concept_preferred_term") == "Sex"
+                    "sex": next(
+                        (
+                            i.get("data_value", "")
+                            for i in donor_metadata
+                            if i.get("grouping_concept_preferred_term") == "Sex"
+                        ),
+                        "",
                     ),
-                    "",
-                ),
-                "diseases": [
-                    item.get("data_value", "")
-                    for item in donor_metadata
-                    if item.get("grouping_concept_preferred_term") == "Medical History"
-                ]
-                or ["normal"],
-                "donor_id": dataset_info.get("donor", {}).get("hubmap_id", ""),
-                "sample_id": next(
-                    (
-                        sample.get("hubmap_id", "")
-                        for sample in dataset_info.get("source_samples", [])
-                        if sample.get("hubmap_id")
+                    "diseases": [
+                        i.get("data_value", "")
+                        for i in donor_metadata
+                        if i.get("grouping_concept_preferred_term") == "Medical History"
+                    ]
+                    or ["normal"],
+                    "donor_id": dataset_info.get("donor", {}).get("hubmap_id", ""),
+                    "sample_id": next(
+                        (
+                            s.get("hubmap_id", "")
+                            for s in dataset_info.get("source_samples", [])
+                            if s.get("hubmap_id")
+                        ),
+                        "",
                     ),
-                    "",
-                ),
-                "ancestor_id": dataset_info.get("immediate_ancestor_ids", [])[0]
-                if dataset_info.get("immediate_ancestor_ids")
-                else "",  # Always the first ancestor ID
-                **urls,
-            }
-            data.append(row)
+                    "ancestor_id": dataset_info.get("immediate_ancestor_ids", [])[0]
+                    if dataset_info.get("immediate_ancestor_ids")
+                    else "",
+                    **urls,
+                }
+
+                data.append(row)
+                valid_uuids.append(uuid)
+
+            except Exception as e:
+                print(f"[ERROR] uuid {uuid} failed: {e}")
+
             progress.update(task, advance=1)
 
-    df = pd.DataFrame(data)
-
+    df = pd.DataFrame(data, index=valid_uuids)
+    df.index.name = "uuid"
     return df
 
 
