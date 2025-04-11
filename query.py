@@ -17,7 +17,7 @@ DataSetClass = TypeVar("DataSetClass", bound=NamedTuple)
 
 
 class scRNAseqDataset(NamedTuple):
-    raw_expr: str
+    raw_expr: str | None = None
     expr: str | None = None
     secondary_analysis: str | None = None
     scvelo: str | None = None
