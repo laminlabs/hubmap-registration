@@ -1,7 +1,7 @@
 import re
 import time
 from datetime import datetime, timezone
-from typing import Any, Iterable, NamedTuple, TypeVar
+from typing import Any, Iterable, List, NamedTuple, Optional, TypeVar
 
 import pandas as pd
 from lamin_utils import logger
@@ -19,10 +19,10 @@ DataSetClass = TypeVar("DataSetClass", bound=NamedTuple)
 
 
 class scRNAseqDataset(NamedTuple):
-    raw_expr: str | None = None
-    expr: str | None = None
-    secondary_analysis: str | None = None
-    scvelo: str | None = None
+    raw_expr: str | None
+    expr: str | None
+    secondary_analysis: str | None
+    scvelo: str | None
 
 
 class BulkseqDataset(NamedTuple):
@@ -110,9 +110,15 @@ def create_hubmap_metadata_df(
     hubmap_metadata: pd.DataFrame,
     file_types: Iterable[str],
     dataset_class: DataSetClass,
+    assay_filter: Optional[List[str]] = None,
 ) -> pd.DataFrame:
     data = []
     valid_uuids = []
+
+    if assay_filter is not None:
+        hubmap_metadata = hubmap_metadata[
+            hubmap_metadata["assay_type"].isin(assay_filter)
+        ]
 
     metadata_lookup = hubmap_metadata.set_index("uuid")
 
@@ -152,11 +158,8 @@ def create_hubmap_metadata_df(
                     )
                     continue
 
-                # Dynamically collect all URLs from dataset class
-                urls = {
-                    f"{field}_url": getattr(dataset_urls, field) or ""
-                    for field in dataset_class.__annotations__
-                }
+                # Convert the dataset_class instance to a *_url dictionary
+                urls = {f"{k}_url": v or "" for k, v in dataset_urls._asdict().items()}
 
                 row_meta = metadata_lookup.loc[uuid]
                 row = {
