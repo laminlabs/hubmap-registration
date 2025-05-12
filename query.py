@@ -111,7 +111,7 @@ def create_hubmap_metadata_df(
     hubmap_metadata: pd.DataFrame,
     file_types: Iterable[str],
     dataset_class: DataSetClass,
-    assay_filter: Collection[str] | None,
+    assay_filter: Collection[str] = None,
 ) -> pd.DataFrame:
     data = []
     valid_uuids = []
