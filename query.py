@@ -1,7 +1,8 @@
 import re
 import time
 from datetime import datetime, timezone
-from typing import Any, Iterable, List, NamedTuple, Optional, TypeVar
+from typing import Any, NamedTuple, TypeVar
+from collections.abc import Iterable, Collection
 
 import pandas as pd
 from lamin_utils import logger
@@ -110,7 +111,7 @@ def create_hubmap_metadata_df(
     hubmap_metadata: pd.DataFrame,
     file_types: Iterable[str],
     dataset_class: DataSetClass,
-    assay_filter: Optional[List[str]] = None,
+    assay_filter: Collection[str] | None,
 ) -> pd.DataFrame:
     data = []
     valid_uuids = []
