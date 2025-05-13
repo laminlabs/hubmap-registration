@@ -282,7 +282,7 @@ def create_hubmap_metadata_df(
             progress.update(task, advance=1)
 
     df = pd.DataFrame(data, index=valid_uuids)
-    df.index.name = "uuid"
+
     return df
 
 
