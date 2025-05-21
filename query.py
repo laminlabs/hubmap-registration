@@ -114,7 +114,6 @@ def create_hubmap_metadata_df(
     assay_filter: Collection[str] = None,
 ) -> pd.DataFrame:
     data = []
-    valid_uuids = []
 
     if assay_filter is not None:
         hubmap_metadata = hubmap_metadata[
@@ -274,15 +273,17 @@ def create_hubmap_metadata_df(
                 }
 
                 data.append(row)
-                valid_uuids.append(uuid)
+                row["uuid"] = uuid
 
             except Exception as e:
                 logger.error(f"Error processing uuid {uuid}: {e}")
 
             progress.update(task, advance=1)
 
-    df = pd.DataFrame(data, index=valid_uuids)
-    df.index.name = "uuid"
+    df = pd.DataFrame(data)
+    columns = ["uuid"] + [col for col in df.columns if col != "uuid"]
+    df = df[columns]
+
     return df
 
 
